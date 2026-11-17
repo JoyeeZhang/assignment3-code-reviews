@@ -109,7 +109,7 @@ def main():
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--max-iterations", type=int, default=100)
     parser.add_argument("--output-dir", type=Path,
-                        default=Path(__file__).resolve().parent / "kmeans")
+                        default=Path(__file__).resolve().parent / "results" / "kmeans")
     args = parser.parse_args()
     run_experiments(args.output_dir, args.seed, args.max_iterations)
 

@@ -43,7 +43,21 @@ def corrupt_training_labels(clean_labels, rng):
     return np.where(flips, -clean_labels, clean_labels)
 
 
-def repair_labels_knn(train_features, noisy_labels, neighbors):
+def find_neighbor_indices(train_features, neighbors):
+    """Find other training neighbors once; ties use original row indices."""
+    import numpy as np
+    if neighbors != 5 or len(train_features) <= neighbors:
+        raise ValueError('Use five neighbors and at least six training points.')
+    indices = np.empty((len(train_features), neighbors), dtype=int)
+    for i, point in enumerate(train_features):
+        squared_distances = np.sum((train_features - point) ** 2, axis=1)
+        squared_distances[i] = np.inf
+        indices[i] = np.argsort(squared_distances, kind='stable')[:neighbors]
+    return indices
+
+
+def repair_labels_knn(train_features, noisy_labels, neighbors,
+                      neighbor_indices=None):
     """Q3(b): propose a K-NN label-repair method; return repaired labels.
 
     For this simplified assignment, use 5 neighbors, Euclidean distance,
@@ -57,15 +71,11 @@ def repair_labels_knn(train_features, noisy_labels, neighbors):
     import numpy as np
     if neighbors != 5 or len(train_features) <= neighbors:
         raise ValueError('Use five neighbors and at least six training points.')
-    repaired = np.empty(len(noisy_labels), dtype=int)
-    for i, point in enumerate(train_features):
-        squared_distances = np.sum((train_features - point) ** 2, axis=1)
-        squared_distances[i] = np.inf  # Exclude self, even with duplicates.
-        # Stable sorting breaks distance ties by original training row index.
-        indices = np.argsort(squared_distances, kind='stable')[:neighbors]
+    # A supplied cache must correspond to these features in the same row order.
+    if neighbor_indices is None:
+        neighbor_indices = find_neighbor_indices(train_features, neighbors)
     # TODO: Replace labels using the majority vote of their five neighbors.
-        repaired[i] = 1 if noisy_labels[indices].sum() > 0 else -1
-    return repaired
+    return np.where(noisy_labels[neighbor_indices].sum(axis=1) > 0, 1, -1)
 
 
 def train_and_evaluate(train_features, train_labels, test_features, test_labels):
@@ -94,13 +104,15 @@ def run_comparison(repeats, seed, neighbors, output_path):
     rng = np.random.default_rng(seed)
     train_x, train_y = generate_clean_split(rng)
     test_x, test_y = generate_clean_split(rng)
+    # Features stay fixed: reuse neighborhoods across all corruption trials.
+    neighbor_indices = find_neighbor_indices(train_x, neighbors)
     rows = []
     # TODO: For each repeat, corrupt training labels and evaluate the baseline.
     for trial in range(1, repeats + 1):
         noisy = corrupt_training_labels(train_y, rng)
         baseline = train_and_evaluate(train_x, noisy, test_x, test_y)
     # TODO: Repair the same noisy labels with K-NN.
-        repaired = repair_labels_knn(train_x, noisy, neighbors)
+        repaired = repair_labels_knn(train_x, noisy, neighbors, neighbor_indices)
     # TODO: Train a fresh SVM on repaired labels; evaluate on clean test data.
         knn = train_and_evaluate(train_x, repaired, test_x, test_y)
         rows.append((trial, baseline, knn))
